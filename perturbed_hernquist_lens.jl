@@ -1,7 +1,5 @@
 using Plots
-# using MeshGrid
 plotlyjs()
-# default(show=true)
 using Contour
 
 function chi(x)
