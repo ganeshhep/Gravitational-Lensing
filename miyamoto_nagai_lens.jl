@@ -1,5 +1,6 @@
 using Plots
 plotlyjs()
+using Contour
 
 function det(m_d, a, b, x_1, x_2)
     term_1 = (a + sqrt(x_2^2 + b^2))^2 - x_1^2
