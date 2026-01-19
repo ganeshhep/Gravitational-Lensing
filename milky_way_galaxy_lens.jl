@@ -1,6 +1,7 @@
 using Plots
 plotlyjs()
 using Contour
+using FiniteDifferences
 
 function chi(x)
     if x > 1
@@ -143,45 +144,124 @@ function det(m_b, m_d, a, b, ρ_h, λ, x_1, x_2)
     return (1 - κ)^2 - γ^2
 end
 
-function critical_and_caustic_curves(m_b, m_d, a, b, ρ_h, λ, min, max, N)
+function psrc_img(m_b, m_d, a, b, ρ_h, λ, y1_src, y2_src, min, max, N, tol)
+    x1_vals = x2_vals = range(min, max, N)
+
+    x1_sol = Float64[]
+    x2_sol = Float64[]
+
+    for x1 in x1_vals, x2 in x2_vals
+        α₁ = α_milky_way(m_b, m_d, a, b, ρ_h, λ, x1, x2)[1]
+        α₂ = α_milky_way(m_b, m_d, a, b, ρ_h, λ, x1, x2)[2]
+
+        y1 = x1 - α₁
+        y2 = x2 - α₂
+
+        dist = sqrt((y1 - y1_src)^2 + (y2 - y2_src)^2)
+
+        if dist < tol
+           push!(x1_sol, x1)
+           push!(x2_sol, x2)
+        end
+    end
+
+    return x1_sol, x2_sol
+end
+
+function mwg_lens(m_b, m_d, a, b, ρ_h, λ, y1_src, y2_src, min, max, N, tol)
     x1_val = x2_val = range(min, max, N)
 
     det_vals = [det(m_b, m_d, a, b, ρ_h, λ, x1_c, x2_c) for x1_c in x1_val, x2_c in x2_val]
 
     c = Contour.contour(x1_val, x2_val, det_vals, 0.0)
 
+    cd = central_fdm(5, 1)
+
+    ψ₁₁_num = [cd(x_1 -> α_milky_way(m_b, m_d, a, b, ρ_h, λ, x_1, x_2)[1], x_1) for x_1 in x1_val, x_2 in x2_val]
+    ψ₂₂_num = [cd(x_2 -> α_milky_way(m_b, m_d, a, b, ρ_h, λ, x_1, x_2)[2], x_2) for x_1 in x1_val, x_2 in x2_val]
+    ψ₁₂_num = [cd(x_1 -> α_milky_way(m_b, m_d, a, b, ρ_h, λ, x_1, x_2)[2], x_1) for x_1 in x1_val, x_2 in x2_val]
+
+    κ = @. 0.5 * (ψ₁₁_num + ψ₂₂_num)
+    γ₁ = @. 0.5 * (ψ₁₁_num - ψ₂₂_num)
+    γ₂ = ψ₁₂_num
+    γ = @. sqrt(γ₁^2 + γ₂^2)
+
+    det_vals_num = @. (1 - κ)^2 - γ^2
+
+    # println(det_vals[1][1])
+    # println(det_vals_num[1][1])
+
+    cnum = Contour.contour(x1_val, x2_val, det_vals_num, 0.0)
+
     plt1 = plot(; legend = true)
     plt2 = plot(; legend = true)
+    plt3 = plot(; legend = true)
+    
+    # Analytical Solutions
+    # for line in lines(c)
+    #     x1, x2 = coordinates(line)
 
-    for line in lines(c)
-        x1, x2 = coordinates(line)
+    #     l = length(x1)
 
-        l = length(x1)
+    #     α₁ = Float64[]
+    #     α₂ = Float64[]
+
+    #     for i in 1:l
+    #         ang1, ang2 = α_milky_way(m_b, m_d, a, b, ρ_h, λ, x1[i], x2[i])
+
+    #         push!(α₁, ang1)
+    #         push!(α₂, ang2)
+
+    #     end
+
+    #     y1 = @. x1 - α₁
+    #     y2 = @. x2 - α₂
+
+    #     scatter!(plt1, x1, x2, markersize = 1.0, label = "a = $a, b = $b, ρ = $ρ_h", xlabel = "x₁", ylabel = "x₂", title = "Milky Way Galaxy Lens : Critical Curves",
+    #              size = (1000, 1000), dpi = 300)
+
+    #     scatter!(plt2, y1, y2, markersize = 1.0, label = "a = $a, b = $b, ρ = $ρ_h", xlabel = "y₁", ylabel = "y₂", title = "Milky Way Galaxy Lens : Caustic Curves",
+    #              size = (1000, 1000), dpi = 300)
+
+    # end
+
+    # Numerical Solutions
+    for line_num in lines(cnum)
+        x1_num, x2_num = coordinates(line_num)
+
+        lnum = length(x1_num)
 
         α₁ = Float64[]
         α₂ = Float64[]
 
-        for i in 1:l
-            ang1, ang2 = α_milky_way(m_b, m_d, a, b, ρ_h, λ, x1[i], x2[i])
+        for i in 1:lnum
+            ang1, ang2 = α_milky_way(m_b, m_d, a, b, ρ_h, λ, x1_num[i], x2_num[i])
 
             push!(α₁, ang1)
             push!(α₂, ang2)
 
         end
 
-        y1 = @. x1 - α₁
-        y2 = @. x2 - α₂
+        y1_num = @. x1_num - α₁
+        y2_num = @. x2_num - α₂
 
-        scatter!(plt1, x1, x2, markersize = 1.0, label = "a = $a, b = $b, ρ = $ρ_h", xlabel = "x₁", ylabel = "x₂", title = "Milky Way Galaxy Lens : Critical Curves",
-                 size = (1000, 1000), dpi = 300)
+        scatter!(plt1, x1_num, x2_num, markersize = 1.0, label = "a = $a, b = $b, ρ = $ρ_h", xlabel = "x₁", ylabel = "x₂", title = "Milky Way Galaxy Lens : Critical Curves",
+                 size = (1000, 1000), dpi = 300, markercolor = "black")
 
-        scatter!(plt2, y1, y2, markersize = 1.0, label = "a = $a, b = $b, ρ = $ρ_h", xlabel = "y₁", ylabel = "y₂", title = "Milky Way Galaxy Lens : Caustic Curves",
-                 size = (1000, 1000), dpi = 300)
+        scatter!(plt2, y1_num, y2_num, markersize = 1.0, label = "a = $a, b = $b, ρ = $ρ_h", xlabel = "y₁", ylabel = "y₂", title = "Milky Way Galaxy Lens : Caustic Curves",
+                 size = (1000, 1000), dpi = 300, markercolor = "black")
 
     end
+    
+    x1s, x2s = psrc_img(m_b, m_d, a, b, ρ_h, λ, y1_src, y2_src, min, max, N, tol)
+
+    scatter!(plt3, x1s, x2s, label = "Image", xlabel = "x₁", ylabel = "x₂", title = "Milky Way Galaxy Lens : Point Source Images",
+             size = (1000, 1000), dpi = 300, markercolor = "black")
+    scatter!(plt3, [y1_src], [y2_src], label = "Source", markercolor = "blue")
 
     display(plt1)
     display(plt2)
+    display(plt3)
 
 end
 
@@ -193,8 +273,11 @@ m_d = 30.0
 r_0 = 0.7
 r_c = 6.0
 λ = r_0/r_c
+y1_src = 0.5
+y2_src = 0.5
 min = - 30.0
 max = 30.0
 N = 15000
+tol = 1e-1
 
-critical_and_caustic_curves(m_b, m_d, a, b, ρ_h, λ, min, max, N)
+mwg_lens(m_b, m_d, a, b, ρ_h, λ, y1_src, y2_src, min, max, N, tol)
